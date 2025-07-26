@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Personal Diet Planner</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <!-- Tailwind CDN for quick styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .fade-in { animation: fadeIn .5s ease-in-out; }
+        @keyframes fadeIn { from {opacity:0; transform:translateY(-10px)} to{opacity:1;transform:translateY(0)}}
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+<main class="max-w-3xl mx-auto px-4 py-10">
+    <h1 class="text-4xl font-bold text-center text-indigo-600 mb-6">Personal Diet Planner</h1>
+
+    <!-- ===== FORM ===== -->
+    <form id="dietForm" class="bg-white rounded-xl shadow-md p-6 space-y-5">
+        <div class="grid md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium">Age</label>
+                <input type="number" name="age" min="12" max="100" required class="w-full mt-1 px-3 py-2 border rounded-md"/>
+            </div>
+            <div>
+                <label class="block text-sm font-medium">Sex</label>
+                <select name="sex" required class="w-full mt-1 px-3 py-2 border rounded-md">
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium">Height (cm)</label>
+                <input type="number" name="height" min="100" required class="w-full mt-1 px-3 py-2 border rounded-md"/>
+            </div>
+            <div>
+                <label class="block text-sm font-medium">Weight (kg)</label>
+                <input type="number" name="weight" step="0.1" min="30" required class="w-full mt-1 px-3 py-2 border rounded-md"/>
+            </div>
+            <div>
+                <label class="block text-sm font-medium">Activity level</label>
+                <select name="activity" required class="w-full mt-1 px-3 py-2 border rounded-md">
+                    <option value="1.2">Sedentary (little / no exercise)</option>
+                    <option value="1.375">Lightly active (light exercise 1-3 days)</option>
+                    <option value="1.55">Moderately active (moderate 3-5 days)</option>
+                    <option value="1.725">Very active (hard 6-7 days)</option>
+                    <option value="1.9">Extra active (very hard, physical job)</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium">Goal</label>
+                <select name="goal" required class="w-full mt-1 px-3 py-2 border rounded-md">
+                    <option value="lose">Lose weight</option>
+                    <option value="maintain">Maintain</option>
+                    <option value="gain">Gain weight</option>
+                </select>
+            </div>
+        </div>
+        <button type="submit"
+                class="w-full bg-indigo-600 text-white py-2 rounded-md hover:bg-indigo-700 transition">
+            Calculate Plan
+        </button>
+    </form>
+
+    <!-- ===== RESULTS ===== -->
+    <section id="results" class="mt-10 hidden">
+        <div class="bg-white rounded-xl shadow-md p-6 space-y-5">
+            <h2 class="text-2xl font-bold text-gray-800">Your Results</h2>
+
+            <!-- BMI -->
+            <div id="bmiCard" class="p-4 rounded-lg bg-indigo-50 border-l-4 border-indigo-500">
+                <h3 class="font-semibold text-lg">BMI</h3>
+                <p id="bmiText" class="text-2xl font-bold text-indigo-700"></p>
+                <p id="bmiCategory" class="text-sm text-gray-600"></p>
+            </div>
+
+            <!-- Calories & Macros -->
+            <div id="macroCard" class="p-4 rounded-lg bg-green-50 border-l-4 border-green-500">
+                <h3 class="font-semibold text-lg">Daily Calories & Macros</h3>
+                <p id="calories" class="text-xl font-bold text-green-700"></p>
+                <ul id="macros" class="list-disc list-inside text-sm text-gray-700 mt-1"></ul>
+            </div>
+
+            <!-- Meal Plan -->
+            <div id="mealCard" class="p-4 rounded-lg bg-yellow-50 border-l-4 border-yellow-500">
+                <h3 class="font-semibold text-lg">Sample Meal Plan</h3>
+                <ul id="mealPlan" class="text-sm space-y-2 mt-2"></ul>
+            </div>
+        </div>
+    </section>
+</main>
+
+<script>
+/* ========== 1. HELPER FUNCTIONS ========== */
+function calcBMI(weightKg, heightCm) {
+    return (weightKg / ((heightCm / 100) ** 2)).toFixed(1);
+}
+
+function bmiCategory(bmi) {
+    if (bmi < 18.5) return "Underweight";
+    if (bmi < 24.9) return "Normal weight";
+    if (bmi < 29.9) return "Overweight";
+    return "Obesity";
+}
+
+// Mifflin-St Jeor
+function calcBMR(weight, height, age, sex) {
+    return sex === "male"
+        ? 10 * weight + 6.25 * height - 5 * age + 5
+        : 10 * weight + 6.25 * height - 5 * age - 161;
+}
+
+function calcTDEE(bmr, activity) {
+    return bmr * activity;
+}
+
+// simple macro split
+function macrosFromCalories(calories) {
+    const protein = Math.round((calories * 0.3) / 4);   // 30%
+    const fat     = Math.round((calories * 0.3) / 9);   // 30%
+    const carbs   = Math.round((calories * 0.4) / 4);   // 40%
+    return { protein, fat, carbs };
+}
+
+/* ========== 2. MEAL PLAN GENERATOR ========== */
+// Very small food database
+const foods = {
+    breakfast: [
+        {name: "Oatmeal w/ berries & almonds", kcal: 350, p:12, f:10, c:55},
+        {name: "Greek yogurt w/ honey & walnuts", kcal: 300, p:20, f:10, c:30},
+        {name: "2 scrambled eggs + whole-wheat toast", kcal: 400, p:25, f:18, c:30},
+    ],
+    lunch: [
+        {name: "Grilled chicken quinoa bowl", kcal: 550, p:40, f:15, c:55},
+        {name: "Salmon salad w/ olive oil", kcal: 500, p:35, f:30, c:20},
+        {name: "Veggie stir-fry + brown rice", kcal: 450, p:15, f:10, c:70},
+    ],
+    dinner: [
+        {name: "Steak + sweet potato + broccoli", kcal: 600, p:45, f:25, c:35},
+        {name: "Tofu curry w/ basmati rice", kcal: 500, p:20, f:20, c:60},
+        {name: "Tuna pasta salad", kcal: 450, p:30, f:15, c:45},
+    ],
+    snacks: [
+        {name: "Apple + peanut butter", kcal: 200, p:5, f:8, c:25},
+        {name: "Protein shake", kcal: 150, p:25, f:2, c:5},
+        {name: "Mixed nuts", kcal: 180, p:6, f:15, c:6},
+    ]
+};
+
+function generateMealPlan(targetCalories) {
+    const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+    const bf = pick(foods.breakfast);
+    const lu = pick(foods.lunch);
+    const dn = pick(foods.dinner);
+    const sn1 = pick(foods.snacks);
+    const sn2 = pick(foods.snacks);
+
+    const plan = [bf, lu, dn, sn1, sn2];
+    const total = plan.reduce((sum,f)=>sum+f.kcal,0);
+
+    // scale everything to match target
+    const scale = targetCalories / total;
+    return plan.map(f => ({
+        name: f.name,
+        kcal: Math.round(f.kcal * scale),
+        p: Math.round(f.p * scale),
+        f: Math.round(f.f * scale),
+        c: Math.round(f.c * scale)
+    }));
+}
+
+/* ========== 3. MAIN HANDLER ========== */
+document.getElementById("dietForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.target));
+
+    const age = +data.age;
+    const sex = data.sex;
+    const height = +data.height;
+    const weight = +data.weight;
+    const activity = +data.activity;
+    const goal = data.goal;
+
+    // BMI
+    const bmi = calcBMI(weight, height);
+    const category = bmiCategory(bmi);
+
+    // TDEE
+    const bmr = calcBMR(weight, height, age, sex);
+    let tdee = calcTDEE(bmr, activity);
+    if (goal === "lose") tdee -= 500;
+    else if (goal === "gain") tdee += 500;
+
+    const macros = macrosFromCalories(tdee);
+    const mealPlan = generateMealPlan(tdee);
+
+    // Render
+    document.getElementById("bmiText").textContent = bmi;
+    document.getElementById("bmiCategory").textContent = category;
+    document.getElementById("calories").textContent = `${Math.round(tdee)} kcal`;
+    document.getElementById("macros").innerHTML = `
+        <li>Protein: ${macros.protein} g</li>
+        <li>Fat: ${macros.fat} g</li>
+        <li>Carbs: ${macros.carbs} g</li>
+    `;
+
+    const mealList = document.getElementById("mealPlan");
+    mealList.innerHTML = "";
+    mealPlan.forEach(item => {
+        const li = document.createElement("li");
+        li.innerHTML = `<strong>${item.name}</strong> – ${item.kcal} kcal (P:${item.p}g F:${item.f}g C:${item.c}g)`;
+        mealList.appendChild(li);
+    });
+
+    const results = document.getElementById("results");
+    results.classList.remove("hidden");
+    results.scrollIntoView({behavior:"smooth"});
+});
+</script>
+</body>
+</html>
